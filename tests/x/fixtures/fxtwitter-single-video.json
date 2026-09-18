@@ -1,0 +1,43 @@
+{
+  "code": 200,
+  "tweet": {
+    "id": "1000000000000000001",
+    "author": {
+      "screen_name": "example",
+      "name": "Example"
+    },
+    "media": {
+      "videos": [
+        {
+          "duration": 74.774,
+          "thumbnail_url": "https://pbs.twimg.com/media/example.jpg",
+          "variants": [
+            {
+              "url": "https://video.twimg.com/test/3840x2160/sample.mp4?tag=1",
+              "bitrate": 25128000
+            },
+            {
+              "url": "https://video.twimg.com/test/1920x1080/sample.mp4?tag=1",
+              "bitrate": 8000000
+            },
+            {
+              "url": "https://video.twimg.com/test/1280x720/sample.mp4?tag=1",
+              "bitrate": 2000000
+            },
+            {
+              "url": "https://video.twimg.com/test/640x360/sample.mp4?tag=1",
+              "bitrate": 800000
+            },
+            {
+              "url": "https://video.twimg.com/test/480x270/sample.mp4?tag=1",
+              "bitrate": 400000
+            },
+            {
+              "url": "https://video.twimg.com/test/playlist.m3u8"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

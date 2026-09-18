@@ -1,0 +1,156 @@
+.vd-btn {
+  position: fixed;
+  z-index: 2147483647;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 0, 0, 0.92);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+  padding: 0;
+  transition: opacity 0.12s linear, background-color 0.12s linear;
+}
+/* 移出视频区：先淡出，延迟结束才由 JS 置 hidden（避免边缘划过时闪烁） */
+.vd-btn.vd-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+.vd-btn:hover {
+  background: rgba(204, 0, 0, 0.98);
+}
+.vd-btn svg {
+  display: block;
+}
+.vd-menu {
+  position: fixed;
+  z-index: 2147483647;
+  min-width: 250px;
+  max-width: min(340px, calc(100vw - 28px));
+  max-height: calc(100vh - 28px);
+  overflow-y: auto;
+  background: #0f0f0f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  padding: 6px;
+  color: #f1f1f1;
+  font: 13px/1.45 Roboto, Arial, -apple-system, BlinkMacSystemFont, sans-serif;
+  pointer-events: auto;
+}
+.vd-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px 4px;
+  color: #aaa;
+  font-size: 12px;
+}
+.vd-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vd-close {
+  flex: none;
+  background: none;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.vd-close:hover {
+  color: #f1f1f1;
+  background: rgba(255, 255, 255, 0.1);
+}
+.vd-ver {
+  flex: none;
+  color: #606060;
+  font-size: 11px;
+}
+.vd-section {
+  padding: 6px 10px 2px;
+  color: #aaa;
+  font-size: 12px;
+}
+.vd-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: #f1f1f1;
+  font: inherit;
+}
+.vd-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.vd-main {
+  font-weight: 600;
+}
+.vd-sub {
+  color: #aaa;
+  font-size: 12px;
+  margin-top: 1px;
+}
+.vd-status {
+  padding: 14px 12px;
+  color: #aaa;
+}
+.vd-error {
+  padding: 12px;
+  color: #ff6b6b;
+  font-size: 12.5px;
+  white-space: pre-line;
+}
+.vd-retry {
+  margin: 2px 8px 8px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 9999px;
+  background: #f00;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.vd-retry:hover {
+  background: #c00;
+}
+[hidden] {
+  display: none !important;
+}
+.vd-busy .vd-item[data-mode="mux"] {
+  pointer-events: none;
+  opacity: 0.45;
+}
+.vd-busy .vd-item.vd-active {
+  pointer-events: auto;
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.06);
+}
+/* 进行中的条目就是取消入口：悬停变红提示 destructive 语义 */
+.vd-busy .vd-item.vd-active:hover {
+  background: rgba(255, 80, 80, 0.16);
+}
+.vd-busy .vd-item.vd-active:hover .vd-main {
+  color: #ff8a8a;
+}
+.vd-busy .vd-item.vd-active .vd-sub {
+  color: #ff8a8a;
+}
+.vd-busy .vd-item.vd-cancelling {
+  opacity: 0.7;
+}

@@ -1,0 +1,22 @@
+{
+  "name": "videodown",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "YouTube 与 X 视频下载 Chrome 扩展",
+  "scripts": {
+    "build": "tsc --noEmit && node scripts/build.mjs",
+    "test": "npm run build && vitest run",
+    "icons": "node scripts/gen-icons.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.2.9",
+    "@types/node": "^26.5.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0"
+  },
+  "dependencies": {
+    "mediabunny": "^1.56.2"
+  }
+}

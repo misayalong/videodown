@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "VideoDown",
+  "description": "在 YouTube 与 X 视频上选择清晰度并下载；支持浏览器内音视频合并。X 视频通过 FxTwitter 解析。",
+  "version": "0.1.0",
+  "minimum_chrome_version": "111",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "downloads",
+    "storage",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "https://*.googlevideo.com/*",
+    "https://*.gvt1.com/*",
+    "https://api.fxtwitter.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "js": [
+        "main.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://x.com/*",
+        "https://twitter.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
