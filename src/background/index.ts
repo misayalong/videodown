@@ -1,10 +1,13 @@
 import { isStreamUrl, resolveInBackground } from '../platforms/background';
 import type { ResolveRequest } from '../shared/media';
 import { sanitizeFilename } from '../shared/filename';
+import { ensureMediaRequestRules } from './media-rules';
 import type {
   BgRequest,
   DirectDownloadRequest,
   DownloadResponse,
+  FileDownloadRequest,
+  FileStartMessage,
   MuxCancelMessage,
   MuxCancelRequest,
   MuxCancelledMessage,
@@ -61,11 +64,11 @@ async function ensureOffscreen(): Promise<void> {
   await chrome.offscreen.createDocument({
     url: 'offscreen.html',
     reasons: ['WORKERS'],
-    justification: '合并视频与音频轨道（remux）',
+    justification: '获取完整媒体文件或合并视频与音频轨道（remux）',
   });
 }
 
-function toOffscreen(req: MuxStartMessage | MuxCleanupMessage | MuxCancelMessage): void {
+function toOffscreen(req: FileStartMessage | MuxStartMessage | MuxCleanupMessage | MuxCancelMessage): void {
   void chrome.runtime.sendMessage(req).catch(() => undefined);
 }
 
@@ -96,7 +99,7 @@ chrome.runtime.onMessage.addListener((message: ResolveRequest | BgRequest | MuxP
   if (message?.type === 'muxError') {
     const msg = message as MuxErrorMessage;
     // 诊断信息同步落 SW 控制台（chrome://extensions → Service Worker），UI 只显示精简文案
-    console.error(`[VideoDown] 合并失败 job=${msg.jobId}:`, msg.error);
+    console.error(`[VideoDown] 下载失败 job=${msg.jobId}:`, msg.error);
     void loadJob(msg.jobId)
       .then((job) => {
         toTab(job?.tabId ?? null, { type: 'muxFailed', jobId: msg.jobId, error: msg.error });
@@ -116,8 +119,8 @@ chrome.runtime.onMessage.addListener((message: ResolveRequest | BgRequest | MuxP
     // 按字段形态而非 mode 字段分流：带 videoUrl 的一定是合并请求，
     // 防止任何形态的 mode 丢失把合并请求误送进直链分支（直链分支会因无 url 报"视频地址无效"）
     const isMux = message.mode === 'mux' || typeof (message as unknown as MuxDownloadRequest).videoUrl === 'string';
-    if (isMux) {
-      void handleMuxDownload(message as MuxDownloadRequest, sender.tab?.id ?? null).then(sendResponse);
+    if (isMux || message.mode === 'fetch') {
+      void handleOffscreenDownload(message as MuxDownloadRequest | FileDownloadRequest, sender.tab?.id ?? null).then(sendResponse);
       return true;
     }
     void handleDirectDownload(message as DirectDownloadRequest).then(sendResponse);
@@ -164,39 +167,46 @@ async function handleDirectDownload(req: DirectDownloadRequest): Promise<Downloa
   }
   const filename = sanitizeFilename(String(req.filename ?? '')) || 'videodown.mp4';
   try {
+    await ensureMediaRequestRules([req.url]);
     const id = await chrome.downloads.download({ url: req.url, filename, saveAs: false });
     return id !== undefined ? { ok: true } : { ok: false, error: '浏览器拒绝开始下载' };
-  } catch {
-    return { ok: false, error: '下载失败，视频链接可能已过期，请重新解析' };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error && error.message.startsWith('无法设置媒体请求来源')
+      ? error.message : '下载失败，视频链接可能已过期，请重新解析' };
   }
 }
 
-let startingMux = false;
+let startingOffscreen = false;
 
-async function handleMuxDownload(req: MuxDownloadRequest, tabId: number | null): Promise<DownloadResponse> {
-  if (!isStreamUrl(req.videoUrl)) {
-    return rejectStreamUrl('视频轨', req.videoUrl);
+async function handleOffscreenDownload(req: MuxDownloadRequest | FileDownloadRequest, tabId: number | null): Promise<DownloadResponse> {
+  if (req.mode === 'fetch') {
+    if (!isStreamUrl(req.url)) return rejectStreamUrl('完整文件', req.url);
+  } else {
+    if (!isStreamUrl(req.videoUrl)) return rejectStreamUrl('视频轨', req.videoUrl);
+    if (!isStreamUrl(req.audioUrl)) return rejectStreamUrl('音频轨', req.audioUrl);
+    if (req.container !== 'mp4' && req.container !== 'webm') {
+      return { ok: false, error: '不支持的封装格式' };
+    }
   }
-  if (!isStreamUrl(req.audioUrl)) {
-    return rejectStreamUrl('音频轨', req.audioUrl);
-  }
-  if (req.container !== 'mp4' && req.container !== 'webm') {
-    return { ok: false, error: '不支持的封装格式' };
-  }
-  if (startingMux) return { ok: false, error: '已有合并任务进行中，请等待其完成' };
-  startingMux = true;
+  if (startingOffscreen) return { ok: false, error: '已有下载任务进行中，请等待其完成' };
+  startingOffscreen = true;
   try {
     const busy = await getBusyJobId();
-    if (busy) return { ok: false, error: '已有合并任务进行中，请等待其完成' };
+    if (busy) return { ok: false, error: '已有下载任务进行中，请等待其完成' };
 
     const jobId = `m${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
-    await saveJob({ jobId, tabId, filename: sanitizeFilename(String(req.filename ?? '')) || `videodown.${req.container}` });
+    const filename = sanitizeFilename(String(req.filename ?? '')) || `videodown.${req.mode === 'fetch' ? 'mp4' : req.container}`;
+    await saveJob({ jobId, tabId, filename });
     try {
+      await ensureMediaRequestRules(req.mode === 'fetch' ? [req.url] : [req.videoUrl, req.audioUrl]);
       await ensureOffscreen();
-      const start: MuxStartMessage = {
+      const start: FileStartMessage | MuxStartMessage = req.mode === 'fetch' ? {
+        type: 'fileStart', jobId, url: req.url,
+        fileBytes: typeof req.fileBytes === 'number' ? req.fileBytes : null,
+      } : {
         type: 'muxStart',
         jobId,
-        filename: (await loadJob(jobId))!.filename,
+        filename,
         container: req.container,
         videoUrl: req.videoUrl,
         videoCodec: req.videoCodec,
@@ -207,12 +217,13 @@ async function handleMuxDownload(req: MuxDownloadRequest, tabId: number | null):
       };
       toOffscreen(start);
       return { ok: true, jobId };
-    } catch {
+    } catch (error) {
       await clearJob(jobId);
-      return { ok: false, error: '无法启动合并模块，请重试' };
+      return { ok: false, error: error instanceof Error && error.message.startsWith('无法设置媒体请求来源')
+        ? error.message : '无法启动下载模块，请重试' };
     }
   } finally {
-    startingMux = false;
+    startingOffscreen = false;
   }
 }
 

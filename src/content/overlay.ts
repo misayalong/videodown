@@ -349,6 +349,7 @@ let muxJobId: string | null = null;
 let muxPercent = 0;
 let muxLabel: string | null = null;
 let muxOptionId: string | null = null;
+let muxMode: 'mux' | 'fetch' = 'mux';
 /** 已发出取消请求、等待后台确认的中间态（此间禁止开始新任务） */
 let muxCancelling = false;
 let activeMuxItem: HTMLButtonElement | null = null;
@@ -359,7 +360,7 @@ let cancelGuard = 0;
 function muxMainText(label: string): string {
   if (!muxJobId) return label;
   if (muxCancelling) return `${label} · 取消中…`;
-  return `${label} · 合并中 ${muxPercent}%`;
+  return `${label} · ${muxMode === 'fetch' ? '下载中' : '合并中'} ${muxPercent}%`;
 }
 
 function muxSubText(): string {
@@ -400,6 +401,7 @@ function resetMuxState(): void {
   muxPercent = 0;
   muxLabel = null;
   muxOptionId = null;
+  muxMode = 'mux';
   muxCancelling = false;
   activeMuxItem = null;
   menu.classList.remove('vd-busy');
@@ -448,7 +450,7 @@ async function cancelMux(): Promise<void> {
 }
 
 async function startDownload(variant: DownloadOption, item: HTMLButtonElement): Promise<void> {
-  if (variant.download.mode === 'mux' && muxJobId) {
+  if (variant.download.mode !== 'direct' && muxJobId) {
     if (item === activeMuxItem) void cancelMux();
     return;
   }
@@ -459,11 +461,12 @@ async function startDownload(variant: DownloadOption, item: HTMLButtonElement): 
     renderError(res.error || '下载失败，请重试');
     return;
   }
-  if (variant.download.mode === 'mux') {
+  if (variant.download.mode !== 'direct') {
     muxJobId = res.jobId ?? null;
     muxPercent = 0;
     muxLabel = variant.label;
     muxOptionId = variant.id;
+    muxMode = variant.download.mode;
     setMuxItem(item, variant.label);
   } else {
     hideAll();

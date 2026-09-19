@@ -35,6 +35,9 @@ describe('平台模块与公共下载契约', () => {
   it.each(['https://media.googlevideo.com/video', 'https://media.gvt1.com/video', 'https://video.twimg.com/x.mp4'])('允许已注册平台流地址 %s', (url) => expect(isStreamUrl(url)).toBe(true));
   it.each(['https://video.twimg.com.evil.example/x.mp4', 'https://googlevideo.com.evil.example/video', 'file:///etc/passwd', 'javascript:alert(1)', 'https://example.com/video'])('拒绝未授权流地址 %s', (url) => expect(isStreamUrl(url)).toBe(false));
 
+  it.each(['https://upos.bilivideo.com/v.m4s', 'https://node.mcdn.bilivideo.cn/v.m4s', 'https://v26-web.douyinvod.com/v.mp4'])('允许两站 CDN %s', (url) => expect(isStreamUrl(url)).toBe(true));
+  it.each(['http://v26-web.douyinvod.com/v', 'https://bilivideo.com.evil.example/v', 'https://fakebilivideo.cn/v', 'https://douyinvod.com.evil.example/v', 'https://user:secret@v26-web.douyinvod.com/v'])('拒绝伪造或不安全媒体地址 %s', (url) => expect(isStreamUrl(url)).toBe(false));
+
   it('X 后台解析返回统一结果，每次请求重新获取以支持菜单重试', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ json: async () => fixture, ok: true });
     vi.stubGlobal('fetch', fetchMock);

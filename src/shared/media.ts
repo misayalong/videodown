@@ -1,4 +1,4 @@
-import type { DirectDownloadRequest, MuxDownloadRequest } from './types';
+import type { DirectDownloadRequest, FileDownloadRequest, MuxDownloadRequest } from './types';
 
 /** 平台模块交付给公共菜单的下载选项；文件命名规则由平台决定。 */
 export interface DownloadOption {
@@ -8,7 +8,7 @@ export interface DownloadOption {
   ext: string;
   height: number | null;
   contentLength: number | null;
-  download: DirectDownloadRequest | MuxDownloadRequest;
+  download: DirectDownloadRequest | FileDownloadRequest | MuxDownloadRequest;
 }
 
 export interface MediaVideo {

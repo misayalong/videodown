@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "VideoDown",
-  "description": "在 YouTube 与 X 视频上选择清晰度并下载；支持浏览器内音视频合并。X 视频通过 FxTwitter 解析。",
-  "version": "0.1.0",
+  "description": "在 YouTube、X、抖音与 B 站视频上选择清晰度并下载；支持浏览器内音视频合并。X 视频通过 FxTwitter 解析。",
+  "version": "0.2.5",
   "minimum_chrome_version": "111",
   "icons": {
     "16": "icons/icon16.png",
@@ -12,12 +12,16 @@
   "permissions": [
     "downloads",
     "storage",
-    "offscreen"
+    "offscreen",
+    "declarativeNetRequestWithHostAccess"
   ],
   "host_permissions": [
     "https://*.googlevideo.com/*",
     "https://*.gvt1.com/*",
-    "https://api.fxtwitter.com/*"
+    "https://api.fxtwitter.com/*",
+    "https://*.bilivideo.com/*",
+    "https://*.bilivideo.cn/*",
+    "https://*.douyinvod.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -34,10 +38,24 @@
       "world": "MAIN"
     },
     {
+      "matches": ["https://www.bilibili.com/*"],
+      "js": ["bilibili-main.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.douyin.com/*"],
+      "js": ["douyin-main.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
       "matches": [
         "https://www.youtube.com/*",
         "https://x.com/*",
-        "https://twitter.com/*"
+        "https://twitter.com/*",
+        "https://www.bilibili.com/*",
+        "https://www.douyin.com/*"
       ],
       "js": [
         "content.js"

@@ -7,6 +7,15 @@ export interface DirectDownloadRequest {
   filename: string;
 }
 
+/** 需要来源头的完整 MP4：在 offscreen 获取原文件，不重新封装。 */
+export interface FileDownloadRequest {
+  type: 'download';
+  mode: 'fetch';
+  url: string;
+  filename: string;
+  fileBytes: number | null;
+}
+
 /** 视频单轨 + 音频单轨的合并下载（remux，不转码），由 offscreen 页执行 */
 export interface MuxDownloadRequest {
   type: 'download';
@@ -22,7 +31,7 @@ export interface MuxDownloadRequest {
   audioBytes: number | null;
 }
 
-export type BgRequest = DirectDownloadRequest | MuxDownloadRequest | MuxCancelRequest;
+export type BgRequest = DirectDownloadRequest | FileDownloadRequest | MuxDownloadRequest | MuxCancelRequest;
 
 /** content → background：取消进行中的合并任务 */
 export interface MuxCancelRequest {
@@ -33,6 +42,14 @@ export interface MuxCancelRequest {
 export type DownloadResponse = { ok: boolean; error?: string; jobId?: string };
 
 // ---- background ⇄ offscreen / content（进度链路） ----
+
+/** 完整文件和合并共用现有 mux 进度、取消、完成消息及单任务槽位。 */
+export interface FileStartMessage {
+  type: 'fileStart';
+  jobId: string;
+  url: string;
+  fileBytes: number | null;
+}
 
 export interface MuxStartMessage {
   type: 'muxStart';
@@ -88,4 +105,3 @@ export type MuxClientMessage =
   | { type: 'muxComplete'; jobId: string }
   | { type: 'muxFailed'; jobId: string; error: string }
   | { type: 'muxCancelled'; jobId: string };
-
