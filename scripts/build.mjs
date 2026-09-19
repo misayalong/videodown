@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 四个单入口构建：content script 与 MAIN world 脚本都是"经典脚本"，不能使用 ES import，
+ * 各平台 MAIN 与公共脚本独立构建：content script 是"经典脚本"，不能使用 ES import，
  * 因此每个入口必须独立构建并内联全部共享代码（inlineDynamicImports），产物平铺到 dist/。
  */
 import { copyFileSync, mkdirSync } from 'node:fs';
@@ -15,6 +15,8 @@ const entries = [
   { name: 'background', file: 'src/background/index.ts' },
   { name: 'content', file: 'src/content/index.ts' },
   { name: 'main', file: 'src/platforms/youtube/main/index.ts' },
+  { name: 'bilibili-main', file: 'src/platforms/bilibili/main.ts' },
+  { name: 'douyin-main', file: 'src/platforms/douyin/main.ts' },
   { name: 'offscreen', file: 'src/offscreen/index.ts' },
 ];
 
@@ -28,7 +30,12 @@ for (const [i, entry] of entries.entries()) {
       emptyOutDir: i === 0,
       rollupOptions: {
         input: { [entry.name]: resolve(root, '..', entry.file) },
-        output: { entryFileNames: '[name].js', format: 'es', codeSplitting: false },
+        // MAIN 与网站共享全局环境，新平台必须用闭包隔离内部函数。
+        output: {
+          entryFileNames: '[name].js',
+          format: entry.name === 'bilibili-main' || entry.name === 'douyin-main' ? 'iife' : 'es',
+          codeSplitting: false,
+        },
       },
     },
   });

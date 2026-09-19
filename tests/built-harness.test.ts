@@ -15,6 +15,8 @@ const listeners: Listener[] = [];
 const tabMessages: Array<{ tabId: number | null; msg: Record<string, unknown> }> = [];
 const downloadCalls: Array<{ url: string; filename: string }> = [];
 const sessionStore = new Map<string, unknown>();
+const ruleUpdates: chrome.declarativeNetRequest.UpdateRuleOptions[] = [];
+let denyRuleUpdate = false;
 
 // 按 Chrome 语义多播给所有 listener，第一个 sendResponse 生效
 const dispatch = (message: unknown, sender: unknown = {}): Promise<unknown> =>
@@ -43,9 +45,16 @@ const dispatch = (message: unknown, sender: unknown = {}): Promise<unknown> =>
 
 (globalThis as Record<string, unknown>).chrome = {
   runtime: {
+    id: 'abcdefghijklmnopabcdefghijklmnop',
     onMessage: { addListener: (fn: Listener) => listeners.push(fn) },
     sendMessage: (msg: unknown) => dispatch(msg),
     getManifest: () => ({ version: '0.0.0-harness' }),
+  },
+  declarativeNetRequest: {
+    updateSessionRules: async (options: chrome.declarativeNetRequest.UpdateRuleOptions) => {
+      if (denyRuleUpdate) throw new Error('permission denied');
+      ruleUpdates.push(options);
+    },
   },
   storage: {
     session: {
@@ -211,6 +220,41 @@ describe.skipIf(!distReady)('构建产物 × chrome 消息链路', () => {
     const results = await Promise.all([dispatch(request, { tab: { id: 1 } }), dispatch(request, { tab: { id: 2 } })]) as Array<{ ok: boolean }>;
     expect(results.filter((r) => r.ok)).toHaveLength(1);
     expect(results.filter((r) => !r.ok)).toHaveLength(1);
+    await vi.waitFor(() => expect(sessionStore.has('busy')).toBe(false));
+  });
+
+  it('来源规则注册失败时不启动新平台下载，重试可恢复', async () => {
+    const before = downloadCalls.length;
+    denyRuleUpdate = true;
+    const res = await dispatch({ type: 'download', mode: 'fetch', fileBytes: null,
+      url: 'https://v26-web.douyinvod.com/video.mp4', filename: 'douyin.mp4' }) as { ok: boolean; error: string };
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain('无法设置媒体请求来源');
+    expect(downloadCalls).toHaveLength(before);
+    denyRuleUpdate = false;
+  });
+
+  it('两站下载前设置来源规则，规则严格限定扩展自身和指定 CDN，不触碰其他站点', async () => {
+    expect(ruleUpdates).toHaveLength(0); // 之前的 YouTube/X 下载不需要注册新规则
+    const res = await dispatch({ type: 'download', mode: 'fetch', fileBytes: null,
+      url: 'https://v26-web.douyinvod.com/video.mp4', filename: 'douyin.mp4' }) as { ok: boolean };
+    expect(res.ok).toBe(true);
+    const rules = ruleUpdates[0]!.addRules!;
+    expect(rules).toHaveLength(2);
+    expect(rules.map(r => r.condition.requestDomains)).toEqual([['bilivideo.com', 'bilivideo.cn'], ['douyinvod.com']]);
+    for (const rule of rules) {
+      expect(rule.condition.initiatorDomains).toEqual(['abcdefghijklmnopabcdefghijklmnop']);
+      expect(rule.condition.resourceTypes).toEqual(['xmlhttprequest', 'media', 'other']);
+      expect(rule.action.type).toBe('modifyHeaders');
+      expect(rule.action.requestHeaders).toHaveLength(1);
+      expect(rule.action.requestHeaders![0]!.header).toBe('Referer');
+    }
+    expect(rules.map(r => r.action.requestHeaders![0]!.value)).toEqual(['https://www.bilibili.com/', 'https://www.douyin.com/']);
+    await vi.waitFor(() => expect(sessionStore.has('busy')).toBe(false)); // Node 无 OPFS，等待错误收尾
+    const next = await dispatch({ type: 'download', mode: 'fetch', fileBytes: null,
+      url: 'https://upos.bilivideo.com/video.mp4', filename: 'bilibili.mp4' }) as { ok: boolean };
+    expect(next.ok).toBe(true);
+    expect(ruleUpdates).toHaveLength(1);
     await vi.waitFor(() => expect(sessionStore.has('busy')).toBe(false));
   });
 

@@ -1,9 +1,9 @@
 {
   "name": "videodown",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.5",
   "type": "module",
-  "description": "YouTube 与 X 视频下载 Chrome 扩展",
+  "description": "YouTube、X、抖音与 B 站视频下载 Chrome 扩展",
   "scripts": {
     "build": "tsc --noEmit && node scripts/build.mjs",
     "test": "npm run build && vitest run",

@@ -1,5 +1,5 @@
 /**
- * offscreen 页：视频单轨 + 音频单轨的 remux 合并（不转码）。
+ * offscreen 页：完整 MP4 原样保存，或视频单轨 + 音频单轨 remux（不转码）。
  *
  * 阶段一：每条轨 **分段并发** 拉取（每路一个有界 Range，写盘时按序落盘）——
  *          2026-09-14 实测：GVS 对单连接限速约 0.7MB/s，而 4~8 路并发可达
@@ -27,7 +27,7 @@ import {
   type InputVideoTrack,
   type VideoCodec,
 } from 'mediabunny';
-import type { MuxCancelMessage, MuxCleanupMessage, MuxStartMessage } from '../shared/types';
+import type { FileStartMessage, MuxCancelMessage, MuxCleanupMessage, MuxStartMessage } from '../shared/types';
 
 const PROGRESS_INTERVAL_MS = 800;
 /** 错误仅包含主机和状态码，不显示带签名的流地址。 */
@@ -39,7 +39,7 @@ async function diagnoseFailure(url: string, res: Response): Promise<string> {
  * 当前任务。取消时同步置空，让新任务可以立刻接上（不等待旧任务的异步收尾）。
  */
 interface ActiveRun {
-  req: MuxStartMessage;
+  req: MuxStartMessage | FileStartMessage;
   controller: AbortController;
 }
 let activeRun: ActiveRun | null = null;
@@ -184,7 +184,8 @@ class ProgressReporter {
   percent(): number {
     const vt = this.videoTotal ?? 0;
     const at = this.audioTotal ?? 0;
-    if (vt > 0 && at > 0) {
+    // 完整文件没有独立音轨，audioTotal 为 0；未知长度仍用 null 表示。
+    if (vt > 0 && this.audioTotal !== null && at >= 0) {
       return Math.min(99, Math.round(((this.videoBytes + this.audioBytes) / (vt + at)) * 100));
     }
     return 50; // 字节数未知时无法按比例，保持中间值直到完成
@@ -233,11 +234,11 @@ async function pumpAudio(
   }
 }
 
-async function runMux(req: MuxStartMessage, controller: AbortController): Promise<void> {
+async function runDownload(req: MuxStartMessage | FileStartMessage, controller: AbortController): Promise<void> {
   const signal = controller.signal;
   // root 在 try 内获取：OPFS 不可用等环境性失败也必须走 muxError，不能变成无响应
   let root: FileSystemDirectoryHandle | null = null;
-  const outName = `videodown-${req.jobId}.${req.container}`;
+  const outName = `videodown-${req.jobId}.${req.type === 'fileStart' ? 'mp4' : req.container}`;
   const videoName = `videodown-${req.jobId}-v.bin`;
   const audioName = `videodown-${req.jobId}-a.bin`;
   const tempNames = [outName, videoName, audioName];
@@ -261,6 +262,16 @@ async function runMux(req: MuxStartMessage, controller: AbortController): Promis
 
   try {
     root = await navigator.storage.getDirectory();
+    if (req.type === 'fileStart') {
+      // offscreen 的 fetch 可命中限定扩展 initiator 的来源规则；原始文件不经过 remux。
+      const progress = new ProgressReporter(req.jobId, req.fileBytes, 0);
+      report({ type: 'muxProgress', jobId: req.jobId, percent: 0 });
+      const file = await downloadTrack(req.url, outName, (n) => progress.video(n), req.fileBytes, VIDEO_CONCURRENCY, signal);
+      progress.flush();
+      throwIfCancelled(signal);
+      report({ type: 'muxDone', jobId: req.jobId, blobUrl: URL.createObjectURL(file) });
+      return;
+    }
     // 阶段一：双轨并行，各一个流式连接顺序落盘（配额内）
     const progress = new ProgressReporter(req.jobId, req.videoBytes, req.audioBytes);
     report({ type: 'muxProgress', jobId: req.jobId, percent: 0 });
@@ -318,23 +329,25 @@ async function runMux(req: MuxStartMessage, controller: AbortController): Promis
       report({ type: 'muxCancelled', jobId: req.jobId });
       return;
     }
-    console.error('[VideoDown] 合并失败：', err);
+    console.error('[VideoDown] 下载失败：', err);
     await cleanup();
-    report({ type: 'muxError', jobId: req.jobId, error: err instanceof Error ? err.message : '合并失败' });
+    report({ type: 'muxError', jobId: req.jobId, error: err instanceof Error ? err.message : '下载失败' });
   }
 }
 
 chrome.runtime.onMessage.addListener((message: unknown) => {
-  const msg = message as Partial<MuxStartMessage> & Partial<MuxCleanupMessage> & Partial<MuxCancelMessage>;
-  if (msg?.type === 'muxStart' && typeof msg.jobId === 'string' && typeof msg.videoUrl === 'string') {
-    const req = msg as unknown as MuxStartMessage;
+  const msg = message as Partial<MuxStartMessage | FileStartMessage | MuxCleanupMessage | MuxCancelMessage>;
+  if (typeof msg?.jobId === 'string' &&
+    ((msg.type === 'muxStart' && typeof msg.videoUrl === 'string') ||
+      (msg.type === 'fileStart' && typeof msg.url === 'string'))) {
+    const req = msg as MuxStartMessage | FileStartMessage;
     if (activeRun) {
-      report({ type: 'muxError', jobId: req.jobId, error: '已有合并任务进行中，请稍候' });
+      report({ type: 'muxError', jobId: req.jobId, error: '已有下载任务进行中，请稍候' });
       return undefined;
     }
     const controller = new AbortController();
     activeRun = { req, controller };
-    void runMux(req, controller).finally(() => {
+    void runDownload(req, controller).finally(() => {
       // 只有仍是自己这一轮才清空：取消时 activeRun 已被置空并可能换成新任务
       if (activeRun?.req === req) activeRun = null;
     });

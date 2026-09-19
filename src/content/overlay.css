@@ -132,7 +132,7 @@
 [hidden] {
   display: none !important;
 }
-.vd-busy .vd-item[data-mode="mux"] {
+.vd-busy .vd-item:not([data-mode="direct"]) {
   pointer-events: none;
   opacity: 0.45;
 }
